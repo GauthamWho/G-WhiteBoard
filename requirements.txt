@@ -1,0 +1,2 @@
+# Root requirements file for Cloud hosts (Render, Railway, Heroku, etc.)
+-r watcher/requirements.txt

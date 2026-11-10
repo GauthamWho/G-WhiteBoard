@@ -5,7 +5,7 @@ services:
     name: g-whiteboard
     runtime: python
     plan: free
-    buildCommand: pip install -r watcher/requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: python watcher/server.py
     envVars:
       - key: PYTHON_VERSION
