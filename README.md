@@ -77,8 +77,10 @@ it's on your board.
 (Windows: `Win+Shift+S` · Mac: `Cmd+Shift+Ctrl+4`), then press the shortcut.
 They land on the board in full quality.
 
+**How the shortcut works now**
+`Ctrl+Shift+C` does two things: it first sends a native `Ctrl+C`/`Cmd+C` to whatever window is active, then captures whatever is now on the clipboard. You don’t need to press `Ctrl+C` first. Normal `Ctrl+C` is untouched.
+
 **Want a different shortcut?** Open `watcher/config.json`, change one line, save.
-It applies in 2 seconds. Try `"alt+f2"` or `"f8"`.
 
 ---
 
