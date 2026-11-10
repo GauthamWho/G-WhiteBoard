@@ -25,7 +25,7 @@ part of "done", never a follow-up.**
 | 2 | Python watcher (hotkey + clipboard read + local server + disk save) | ✅ Done |
 | 3 | Wire together + live test on this PC (real Edge, real hotkey, screenshot flow) | ✅ Done — hotkey fires, image + text land, auto-save + restart-restore proven |
 | 4 | Hotkey fix + user-changeable hotkey (both OSes) | ✅ Done — replaced flaky key-hook with OS-registered hotkey; change live via `watcher/config.json` or POST `/config` |
-| 5 | Launchers (double-click start on Windows), README | ✅ Built — `watcher\start_windows.ps1` |
+| 5 | Launchers (double-click start on Windows), README | ✅ Built — `START G-WhiteBoard (Windows).bat` at repo root (true double-click; Mac twin `.command` too). Desktop-shortcut tip in README |
 | 6 | **User retest: Flameshot copy → Ctrl+Shift+C** | 🔄 Waiting on Gautham |
 | 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ **DONE — LIVE at github.com/GauthamWho/G-WhiteBoard** (pushed, 150+ files, no personal data; README with graphics) |
 | 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |

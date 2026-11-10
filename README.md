@@ -50,7 +50,24 @@ the background — minimise it and forget it.
 > On a Mac, you'll be asked one time to allow "Python" in
 > **System Settings → Privacy & Security → Accessibility**. Say yes, so the shortcut works.
 
-From now on: **copy anything → press `Ctrl+Shift+C` (Mac: `Fn+Cmd+C`) → it's on your board.**
+---
+
+## Starting it every day (10 seconds)
+
+After the first install, you never type those commands again.
+
+1. Open the **G-WhiteBoard** folder.
+2. Double-click **`START G-WhiteBoard (Windows).bat`**
+   (Mac: **`START G-WhiteBoard (Mac).command`**).
+3. Your board opens in the browser. Minimise the small black window —
+   it must stay open while you work (it's the shortcut listener).
+
+**Pro tip:** right-click that file → *Show more options* → *Send to* →
+*Desktop (create shortcut)*. Now starting your whiteboard is one click
+from your desktop, forever.
+
+Done? Just copy anything and press `Ctrl+Shift+C` (Mac: `Fn+Cmd+C`) —
+it's on your board.
 
 **Screenshots too** — take the screenshot to your clipboard first
 (Windows: `Win+Shift+S` · Mac: `Cmd+Shift+Ctrl+4`), then press the shortcut.

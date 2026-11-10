@@ -3,7 +3,7 @@
 #
 # !!! IMPORTANT — READ BEFORE FIRST RUN !!!
 # macOS will ask for ACCESSIBILITY permission for the global hotkey
-# (Ctrl+Alt+C) to work: System Settings -> Privacy & Security -> Accessibility,
+# (default: Fn+Cmd+C) to work: System Settings -> Privacy & Security -> Accessibility,
 # then allow Terminal (or the app running this script).
 # This script and the macOS capture path have NOT been tested on a Mac yet —
 # if something fails, check watcher.log in this folder.
