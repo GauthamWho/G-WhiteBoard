@@ -17,7 +17,7 @@
     <text x="52" y="55" font-family="Segoe UI, sans-serif" font-size="9" fill="#8a8878">09:14</text>
     <rect x="46" y="72" width="50" height="14" rx="4" fill="#e9f4ff" stroke="#3fa9f5"/>
     <rect x="10" y="104" width="160" height="8" rx="4" fill="#33507a"/>
-    <text x="90" y="140" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#5c6f82">presses Ctrl+Alt+C</text>
+    <text x="90" y="140" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="13" fill="#5c6f82">presses Ctrl+Shift+C</text>
   </g>
 
   <!-- Friend -->

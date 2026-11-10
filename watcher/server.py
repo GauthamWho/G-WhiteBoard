@@ -51,9 +51,12 @@ BOARD_EXCALIDRAW = DATA_DIR / "board.excalidraw"
 # Render/other hosts set PORT and expect a public bind; local default stays private.
 HOST = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
 PORT = int(os.environ.get("PORT", "8765"))
-DEFAULT_HOTKEY = "ctrl+alt+c"  # user-changeable in watcher/config.json
+_IS_MAC = platform.system() == "Darwin"
+# Defaults per platform: Windows Ctrl+Shift+C, Mac Fn+Cmd+C (user's pick).
+DEFAULT_HOTKEY = "cmd+fn+c" if _IS_MAC else "ctrl+shift+c"
 DEBOUNCE_SECONDS = 0.5
 CONFIG_PATH = WATCHER_DIR / "config.json"
+_MOD_NAMES = {"ctrl", "control", "alt", "option", "shift", "win", "cmd", "super", "meta", "fn"}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -122,8 +125,11 @@ def _display_hotkey(hotkey: str) -> str:
 
 
 def _pynput_combo(hotkey: str) -> str:
-    """'ctrl+alt+c' -> pynput '<ctrl>+<alt>+c' (for the Mac listener)."""
-    return "".join(f"<{p}>+" for p in hotkey.split("+")[:-1]) + hotkey.split("+")[-1]
+    """'ctrl+alt+c' -> pynput '<ctrl>+<alt>+c' (for the Mac listener).
+    'win' means the Command key on Mac; 'fn' maps to pynput's <fn>."""
+    mods = hotkey.split("+")[:-1]
+    names = {m: {"win": "cmd", "super": "cmd", "meta": "cmd"}.get(m, m) for m in mods}
+    return "".join(f"<{names[m]}>+" for m in mods) + hotkey.split("+")[-1]
 
 
 class HotkeyManager:
@@ -169,6 +175,12 @@ class HotkeyManager:
 
         mod_bits = {"ctrl": 0x0002, "alt": 0x0001, "shift": 0x0004, "win": 0x0008}
         parts = hotkey.split("+")
+        bad = [p for p in parts[:-1] if p not in mod_bits]
+        if bad:
+            # e.g. cmd/fn are Mac-only modifiers
+            log.error("Hotkey %s uses modifier(s) %s that don't exist on Windows — pick ctrl/alt/shift/win",
+                      _display_hotkey(hotkey), "/".join(bad))
+            return
         mods = sum(mod_bits[p] for p in parts[:-1])
         key = parts[-1]
         vk = 0x70 + int(key[1:]) - 1 if key.startswith("f") and key[1:].isdigit() else ord(key.upper())

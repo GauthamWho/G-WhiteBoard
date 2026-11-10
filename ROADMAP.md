@@ -1,6 +1,6 @@
 # Whiteboard Catcher — Roadmap
 
-**End goal:** Press `Ctrl+Alt+C` anywhere in Windows or Mac → whatever is on my clipboard
+**End goal:** Press `Ctrl+Shift+C` anywhere in Windows (Mac: `Fn+Cmd+C`) → whatever is on my clipboard
 (text, image, or a fresh screenshot) lands on my personal whiteboard as a card with a tiny
 timestamp. My normal clipboard is never touched. The board auto-saves everything losslessly,
 forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
@@ -8,7 +8,7 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 **Decisions locked (2026-11-10):**
 - Engine: **Excalidraw** (open-source whiteboard) running as a local browser page (Edge)
 - Listener: tiny Python watcher (~20 MB RAM) — chosen over Electron for "light as feather"
-- Hotkey: `Ctrl+Alt+C` — same key for screenshots (Win+Shift+S first, then the hotkey)
+- Hotkey: `Ctrl+Shift+C` (Windows) / `Fn+Cmd+C` (Mac) — user's pick 2026-11-10; same key for screenshots (Win+Shift+S first, then the hotkey)
 - Clipboard stays intact · Auto-grid placement, no overlaps · Timestamps small + gray
 - Auto-save to disk as full scene JSON with lossless PNG data — restart-safe
 
@@ -22,11 +22,11 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 | 3 | Wire together + live test on this PC (real Edge, real hotkey, screenshot flow) | ✅ Done — hotkey fires, image + text land, auto-save + restart-restore proven |
 | 4 | Hotkey fix + user-changeable hotkey (both OSes) | ✅ Done — replaced flaky key-hook with OS-registered hotkey; change live via `watcher/config.json` or POST `/config` |
 | 5 | Launchers (double-click start on Windows), README | ✅ Built — `watcher\start_windows.ps1` |
-| 6 | **User retest: Flameshot copy → Ctrl+Alt+C** | 🔄 Waiting on Gautham |
+| 6 | **User retest: Flameshot copy → Ctrl+Shift+C** | 🔄 Waiting on Gautham |
 | 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ **DONE — LIVE at github.com/GauthamWho/G-WhiteBoard** (pushed, 150+ files, no personal data; README with graphics) |
 | 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |
 | 9 | Mac setup + permission steps (built, **not run on the Mac yet**) | ⬜ |
-| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | ✅ Code pushed to GitHub. **On Gautham:** 3 clicks on Render (New + → Web Service → pick G-WhiteBoard → Apply) |
+| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | 🔄 **In progress on Render** — code pushed, Gautham configuring the form (build/start commands); waiting for the onrender.com URL |
 | 11 | **Daily auto-backups** — last 7 days in `watcher/data/backups/YYYY-MM-DD/` | ✅ Done + live-tested (fires on first save of each day, atomic copies, auto-prune) |
 
 **WE ARE HERE →** Step 6 (your Flameshot retest) + Step 7 ready to push on your word.

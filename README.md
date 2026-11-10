@@ -7,7 +7,7 @@
 **You copy things all day. Links, prices, ideas, screenshots. And then they're gone.**
 
 G WhiteBoard keeps them. You copy something the way you always do, press
-**Ctrl + Alt + C**, and it appears on your own whiteboard — a neat little card
+**Ctrl + Shift + C** (Mac: **Fn + Cmd + C**), and it appears on your own whiteboard — a neat little card
 with the time underneath. Close your laptop, come back tomorrow: everything is
 still there.
 
@@ -50,7 +50,7 @@ the background — minimise it and forget it.
 > On a Mac, you'll be asked one time to allow "Python" in
 > **System Settings → Privacy & Security → Accessibility**. Say yes, so the shortcut works.
 
-From now on: **copy anything → press `Ctrl+Alt+C` → it's on your board.**
+From now on: **copy anything → press `Ctrl+Shift+C` (Mac: `Fn+Cmd+C`) → it's on your board.**
 
 **Screenshots too** — take the screenshot to your clipboard first
 (Windows: `Win+Shift+S` · Mac: `Cmd+Shift+Ctrl+4`), then press the shortcut.

@@ -20,7 +20,7 @@ Your PC                                  Your friend
         └─────────────────────────────────────────────┘
 ```
 
-- **You** keep using your PC exactly as before: copy → `Ctrl+Alt+C`. Your capture
+- **You** keep using your PC exactly as before: copy → `Ctrl+Shift+C` (Mac: `Fn+Cmd+C`). Your capture
   appears on your local board **and** flows up to the shared online board.
 - **Your friend** only needs a browser and the room link.
 - **Your PC can be off.** The online board is always up.
@@ -69,5 +69,5 @@ same live board.
 | `http://localhost:8765` | Your **private** board on your PC (captures land here) |
 | `https://...onrender.com/?room=X` | The **shared** board in the cloud (room sync) |
 
-A capture with `Ctrl+Alt+C` always lands on your private board, and — while
+A capture with `Ctrl+Shift+C` (Mac: `Fn+Cmd+C`) always lands on your private board, and — while
 your browser tab has a room open — flows to everyone in that room too.
