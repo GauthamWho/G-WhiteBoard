@@ -30,7 +30,7 @@ part of "done", never a follow-up.**
 | 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ **DONE — LIVE at github.com/GauthamWho/G-WhiteBoard** (pushed, 150+ files, no personal data; README with graphics) |
 | 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |
 | 9 | Mac setup + permission steps (built, **not run on the Mac yet**) | ⬜ |
-| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | 🔄 **Fixed build error** — Render defaulted to root `requirements.txt`; added it. Redeploying now. |
+| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | ✅ **LIVE** — https://g-whiteboard.onrender.com |
 | 11 | **Daily auto-backups** — last 7 days in `watcher/data/backups/YYYY-MM-DD/` | ✅ Done + live-tested (fires on first save of each day, atomic copies, auto-prune) |
 
 **WE ARE HERE →** App icon, auto-update notification, and professional launchers complete. Ready for live Render deployment check and cross-device shared room test.
