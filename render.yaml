@@ -1,0 +1,12 @@
+# Render free-tier deploy — the always-on shared board.
+# Docs in relay/README.md. Render reads this file from the repo root.
+services:
+  - type: web
+    name: g-whiteboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r watcher/requirements.txt
+    startCommand: python watcher/server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"

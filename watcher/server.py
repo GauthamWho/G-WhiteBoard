@@ -19,6 +19,7 @@ import base64
 import io
 import json
 import logging
+import os
 import platform
 import re
 import sys
@@ -47,8 +48,9 @@ DATA_DIR = WATCHER_DIR / "data"
 BOARD_JSON = DATA_DIR / "board.json"
 BOARD_EXCALIDRAW = DATA_DIR / "board.excalidraw"
 
-HOST = "127.0.0.1"
-PORT = 8765
+# Render/other hosts set PORT and expect a public bind; local default stays private.
+HOST = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+PORT = int(os.environ.get("PORT", "8765"))
 DEFAULT_HOTKEY = "ctrl+alt+c"  # user-changeable in watcher/config.json
 DEBOUNCE_SECONDS = 0.5
 CONFIG_PATH = WATCHER_DIR / "config.json"
@@ -137,6 +139,12 @@ class HotkeyManager:
     def start(self, hotkey: str) -> bool:
         self.stop()
         self.hotkey = hotkey
+        if platform.system() == "Linux":
+            # Headless (e.g. Render deploy): no clipboard/hotkey here — the
+            # cloud copy only serves the board + room relay. Local watchers
+            # on the user's PC do the capturing.
+            log.info("Headless host: global hotkey disabled (board + relay only)")
+            return False
         self._stop = threading.Event()
         target = self._run_mac if _IS_MAC else self._run_windows
         self._thread = threading.Thread(target=target, args=(hotkey, self._stop), daemon=True, name="hotkey")

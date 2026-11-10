@@ -26,6 +26,7 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 | 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ READY locally — repo committed at `Projects\Tools\2026-11-whiteboard-catcher`, **waiting for your "go" to push** (I can't create public repos; you create the empty repo at github.com/new, I push) |
 | 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |
 | 9 | Mac setup + permission steps (built, **not run on the Mac yet**) | ⬜ |
+| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | 🔄 Deploy prep committed (`render.yaml`, public bind + headless-safe hotkey). **Waiting on Gautham:** empty repo at github.com/new → push → 3 clicks on Render |
 
 **WE ARE HERE →** Step 6 (your Flameshot retest) + Step 7 ready to push on your word.
 
