@@ -1,86 +1,59 @@
 <h1 align="center">G WhiteBoard</h1>
 
 <p align="center">
-<em>Copy anything. Press one shortcut. It's on your whiteboard — with a timestamp, saved forever.</em>
+<img src="assets/banner.svg" alt="G WhiteBoard — copy, press the shortcut, it's on your board" width="100%">
 </p>
 
 <p align="center">
-<img alt="licence" src="https://img.shields.io/badge/licence-Apache%202.0-green">
-<img alt="platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue">
+<a href="#-licence"><img alt="licence" src="https://img.shields.io/badge/licence-Apache%202.0-green"></a>
+<a href="#-works-on-windows-and-mac"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue"></a>
 <img alt="weight" src="https://img.shields.io/badge/RAM%20~20%20MB-light%20as%20a%20feather-orange">
 </p>
 
 ---
 
-## What is this? (read this first)
+## The problem it solves
 
-You know how you copy a link, a paragraph, or a screenshot — and then it just
-sits in your clipboard until you paste it somewhere and forget it?
+You copy things all day — links, prices, addresses, screenshots. Then you lose them.
+They sit in your clipboard for one paste, and disappear.
 
-**G WhiteBoard turns your clipboard into a scrapbook.**
+**G WhiteBoard keeps them, forever, on one neat board.**
 
-1. You copy **anything** — a URL, some text, an image, a screenshot — like you normally do.
-2. You press **one keyboard shortcut** (default `Ctrl+Alt+C`).
-3. That thing appears as a **card on your personal whiteboard** in your browser,
-   with a tiny gray timestamp under it, neatly placed on a grid.
-4. It is **saved to your own disk forever** — close everything, restart your PC,
-   open the board again: everything is still there.
-5. Your clipboard is **never touched** — after the capture, `Ctrl+V` still pastes
-   into WhatsApp, Word, wherever, exactly as before.
+1. **Copy anything** — a link, some text, a photo, a screenshot. The normal way.
+2. **Press one shortcut** — `Ctrl+Alt+C` (you can change it).
+3. **Look at your board** — it's there now, as a card, with the time under it.
+4. **It never goes away** — saved on your own computer, survives restarts.
 
-The whiteboard itself is a real whiteboard: pan, zoom, drag cards around,
-draw on it, resize things. It runs on your own machine — nothing is sent anywhere
-unless *you* decide to share a room (more on that below).
+Your clipboard still works normally. Nothing leaves your computer (unless you share a room — below).
 
-### A 30-second example
+## 🖼 How it works, in one picture
 
-> You're researching a trip. You copy a hotel name → `Ctrl+Alt+C`.
-> You screenshot a map → `Ctrl+Alt+C`.
-> You copy a booking link → `Ctrl+Alt+C`.
->
-> Three cards are now sitting on your board, each with the time you grabbed it:
->
-> ```
-> "Hotel Blue Sky, Kochi"        [a map screenshot]        https://booking.com/xyz
->  2026-11-10 09:14              2026-11-10 09:15          2026-11-10 09:16
-> ```
->
-> Next morning you open the board — all three are still there, exactly where you left them.
+<p align="center">
+<img src="assets/how-it-works.svg" alt="Four steps: copy anything, press the shortcut, the watcher reads it read-only, it appears on your board saved forever" width="100%">
+</p>
 
----
+Two things run on your computer:
 
-## How it works
-
-```mermaid
-flowchart LR
-    A["📋 Copy anything<br/>(text · image · screenshot)"] --> B["⌨️ Press your shortcut<br/>e.g. Ctrl+Alt+C"]
-    B --> C["👀 Watcher<br/>reads the clipboard<br/>(read-only, ~20 MB)"]
-    C --> D["🎨 Whiteboard in your browser<br/>card + tiny timestamp"]
-    D --> E["💾 Auto-saved losslessly<br/>survives restarts"]
-```
-
-There are exactly **two parts**:
-
-| Part | What it is | What it does |
+| Name | What it is | What it does |
 |---|---|---|
-| **The watcher** | A tiny background program (~20 MB RAM, no Electron) | Listens for your shortcut and reads the clipboard |
-| **The board** | A browser tab at `http://localhost:8765` | Shows your whiteboard, auto-saves to disk |
+| **The watcher** | a tiny background program, ~20 MB RAM | waits for your shortcut, reads the clipboard |
+| **The board** | a browser tab | shows your whiteboard, saves everything to disk |
 
-Both start together with one script (below). Leave the browser tab open — that's your board.
+You start both with **one double-click** (below). Then leave the tab open — that's it.
 
 ---
 
-## Installation
+## 🚀 Getting started
 
-You need two free things installed **once**:
+### What to install first (one time only)
 
-- **Python 3** — [python.org/downloads](https://www.python.org/downloads/)
-  (on Windows: tick **"Add Python to PATH"** in the installer's first screen)
-- **Node.js** — [nodejs.org](https://nodejs.org) (used once to build the board; any LTS version)
+1. **Python 3** — from [python.org/downloads](https://www.python.org/downloads).
+   On Windows, tick ✅ **"Add Python to PATH"** on the first screen of the installer. This matters.
+2. **Node.js** — from [nodejs.org](https://nodejs.org). Used once to build the board.
 
 ### Windows
 
-Open **PowerShell** (Start → type "powershell") and run these lines one by one:
+Open **PowerShell** (Start button → type `powershell` → Enter). Paste these lines, one at a time:
 
 ```powershell
 git clone https://github.com/GauthamWho/G-WhiteBoard.git
@@ -90,15 +63,15 @@ cd web; npm install; npm run build; cd ..
 .\watcher\start_windows.ps1
 ```
 
-> No `git` yet? Install it from [git-scm.com](https://git-scm.com), or click
-> **Code → Download ZIP** on this page instead and unzip it — then skip the first two lines.
+> Don't have `git`? On the GitHub page click the green **Code** button → **Download ZIP**,
+> unzip it anywhere, open the folder, then start from the `cd web` line above.
 
-What you'll see: a black window with some text (that's the watcher — minimise it, don't close it),
-and a browser tab opening at `http://localhost:8765`. **That tab is your whiteboard.**
+**What you should see:** a black window with text (the watcher — minimise it, don't close it),
+and a new browser tab at `http://localhost:8765`. **That tab is your board.**
 
 ### macOS
 
-Open **Terminal** and run:
+Open **Terminal** and paste:
 
 ```bash
 git clone https://github.com/GauthamWho/G-WhiteBoard.git
@@ -108,43 +81,50 @@ python3 -m pip install -r watcher/requirements.txt
 bash watcher/start_mac.command
 ```
 
-macOS will ask **once** for permission so the shortcut works system-wide:
-**System Settings → Privacy & Security → Accessibility →** allow **Python**.
-Then open `http://localhost:8765` in your browser — that tab is your whiteboard.
+Mac will ask one time for permission: **System Settings → Privacy & Security →
+Accessibility** → allow **Python**. Then open `http://localhost:8765` in your browser.
 
 ---
 
-## Using it (every day)
+## ✨ Using it every day
 
-### Capturing text or links
+### A real example
 
-1. Copy anything, the normal way (`Ctrl+C` / `Cmd+C`).
-2. Press **`Ctrl+Alt+C`** (Mac: the same combo, or whatever you changed it to).
-3. Look at your board tab — the capture just appeared, with a timestamp.
+> 1. You're booking a trip. You select a hotel name and copy it → press `Ctrl+Alt+C`.
+> 2. You screenshot a map → press `Ctrl+Alt+C`.
+> 3. You copy the booking link → press `Ctrl+Alt+C`.
+>
+> Your board now shows three cards, each with its own time:
+>
+> ```
+> "Hotel Blue Sky, Kochi"     [ map screenshot ]     https://booking.com/xyz
+>  2026-11-10 09:14           2026-11-10 09:15       2026-11-10 09:16
+> ```
+>
+> Tomorrow you open the board — all three are still there.
 
-### Capturing a screenshot
+### Taking screenshots onto the board
 
-1. Take a screenshot **to clipboard**:
-   - Windows: `Win+Shift+S` (Snipping Tool) or [Flameshot](https://flameshot.org)
-   - macOS: `Cmd+Shift+Ctrl+4` (note the `Ctrl` — that copies instead of saving to file)
-2. Press **`Ctrl+Alt+C`**.
-3. The screenshot lands on the board as an image card, full quality, never re-encoded.
+Screenshot **to the clipboard** first, then press the shortcut:
 
-That's the whole learning curve. 🎉
+- **Windows:** `Win+Shift+S` (Snipping Tool), or [Flameshot](https://flameshot.org) — select region → `Ctrl+C`
+- **macOS:** `Cmd+Shift+Ctrl+4` (keep the `Ctrl` — it copies instead of saving a file)
 
-### Things people try (and what happens)
+Images are saved **full quality, never compressed again**.
+
+### Good to know
 
 | You do... | What happens |
 |---|---|
-| Copy something and press the shortcut twice | Only **one** card is created — repeats are de-duplicated |
-| Paste right after capturing | Normal paste works — your clipboard was only read, never modified |
-| Close the browser tab and reopen it | Everything is still there (it auto-saved) |
-| Restart the PC | Everything is still there |
-| Draw on the board with the pen tool | Your drawing is saved and captured like everything else |
+| Capture the same thing twice | still just **one** card — repeats are removed |
+| Paste right after capturing | works normally — your clipboard was only read, never changed |
+| Close the tab, shut down the PC | board reloads complete — it auto-saves every change |
+| Delete something by mistake | daily backups keep the **last 7 days** (see below) |
+| Draw with the pen, drag cards | all saved too — it's a real whiteboard |
 
 ---
 
-## Changing the shortcut
+## ⌨️ Change the shortcut
 
 Open **`watcher/config.json`** in any text editor, change the line, save:
 
@@ -152,74 +132,78 @@ Open **`watcher/config.json`** in any text editor, change the line, save:
 { "hotkey": "ctrl+alt+c" }
 ```
 
-Examples: `"ctrl+shift+9"`, `"alt+f2"`, `"f8"`. The change applies **live, within 2 seconds** — no restart.
-(A bare letter key like `"c"` is not allowed, so normal typing never triggers a capture.
-If another app already owns your combo, a clear message appears in `watcher/watcher.log` — just pick another.)
+Try `"ctrl+shift+9"`, `"alt+f2"`, `"f8"`… It applies **live within 2 seconds** — no restart.
+If another app already owns that combo, a clear message appears in `watcher/watcher.log` — pick another one.
 
 ---
 
-## Where your board lives
+## 💾 Where your board is saved
 
-Everything is stored on **your own disk**, losslessly (images are never re-encoded or downscaled):
+On **your disk**, losslessly — images are never re-encoded or shrunk:
 
-- `watcher/data/board.json` — the full board (this is what the app loads)
-- `watcher/data/board.excalidraw` — a portable copy you can open at
-  [excalidraw.com](https://excalidraw.com) or any Excalidraw-compatible app
+```
+watcher/data/
+├── board.json          ← the live board (auto-loads every time)
+├── board.excalidraw    ← portable copy (opens at excalidraw.com too)
+└── backups/            ← automatic daily snapshots, last 7 days kept
+    └── 2026-11-10/
+```
 
-Nothing ever leaves your computer — the board has no internet dependency.
+Every save is written **atomically** (the same trick databases use) — a power cut
+mid-save can never corrupt your board. Every day, the first save makes a dated
+backup copy, and the last 7 days are kept.
 
----
-
-## Shared boards: two people, one board, live
-
-You in one place, a friend in another — you can work on the **same whiteboard**,
-like Figma or Google Docs do it.
-
-### If your friend is on the same Wi-Fi (same network)
-
-1. Find your computer's local IP (Windows: run `ipconfig`, look for *IPv4 Address*, e.g. `192.168.1.20`).
-2. On your board, click **Copy Link** in the room bar, and replace `localhost`
-   with your IP: `http://192.168.1.20:8765/?room=trip-planning`
-3. Send that link to your friend (their device must be on the same network).
-4. Whatever you capture with `Ctrl+Alt+C` appears on their screen within a second — and their edits appear on yours.
-
-### If your friend is far away (different city/state)
-
-Your board runs on your PC, so distant friends need the board **hosted online**.
-Deploy it once to a free cloud host — see **[DEPLOY.md](DEPLOY.md)** for the
-10-minute setup (free tier, no credit card). After that:
-
-- The board lives at a public link like `https://your-board.onrender.com`
-- Anyone you send the room link to (`.../?room=our-board`) sees and edits the same live board
-- Your PC can be **off**; your own captures still flow up to the shared board whenever your watcher is running
-
-**How rooms work:** the same room link = the same board. Every change is merged
-by element id, so two people never overwrite each other. Everyone who joins gets
-the full current board as a snapshot. The room bar (top of the page) shows who's
-online — click the small **–** to hide it (a tiny pill remains top-left; click it to bring the bar back).
-
-> 💡 Tip: whoever has the link can edit the board. Share it like a doc link, not a password.
+Nothing is sent anywhere. No cloud, no account, no internet needed.
 
 ---
 
-## Troubleshooting
+## 🤝 Two people, one live board
+
+You in one place, a friend in another — work on the **same board at the same time**,
+like Google Docs.
+
+<p align="center">
+<img src="assets/shared-rooms.svg" alt="You and a friend connect to the same room link and see one shared board live" width="100%">
+</p>
+
+### How to share
+
+1. Open your board with a room name in the address:
+   `http://localhost:8765/?room=trip-planning`
+2. Click **Copy Link** in the room bar at the top and send it to your friend.
+3. Everyone with the link sees the same board, live. Every change merges safely —
+   nobody overwrites anybody.
+
+The room bar shows who's online. Don't want it always visible? Click the small **–**
+and it collapses to a tiny pill in the corner — click the pill to bring it back.
+
+### Your friend is in another city?
+
+Then the board needs to live online, not just on your PC. It's a free, one-time,
+10-minute setup — full walkthrough in **[DEPLOY.md](DEPLOY.md)**. After that you get
+a permanent link like `https://your-board.onrender.com/?room=our-board` that works
+from anywhere, and your PC can even be switched off.
+
+---
+
+## 🧰 Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| Pressing the shortcut does nothing | Is the watcher's black window open? Is the board tab open? Check `watcher/watcher.log` — if the combo was already taken by another app, pick a new one (see above) |
-| Screenshot lands as text garbage | You saved the screenshot to a file instead of the clipboard — redo the screenshot with the "copy to clipboard" shortcut shown above |
-| Board tab shows a blank page | Refresh it. If it keeps happening, check `watcher/watcher.log` for a `CLIENT-ERROR` line and open an issue with it |
+| Shortcut does nothing | Is the watcher window open? Is the board tab open? Look at `watcher/watcher.log` — if the combo is taken, change it (above) |
+| Screenshot arrives as garbage text | You saved it to a file instead of the clipboard — redo with the copy-to-clipboard shortcuts shown above |
+| Board tab is blank | Refresh once. Happens again? Check `watcher/watcher.log` for a `CLIENT-ERROR` line and open an issue with it |
 | Mac: shortcut does nothing | Give Python Accessibility permission (System Settings → Privacy & Security → Accessibility) |
 | Port already in use | Another app owns 8765 — close it, or change `PORT` in `watcher/server.py` |
 
 ---
 
-## Building blocks
+## 🧱 Under the hood
 
 - [Excalidraw](https://excalidraw.com) — the open-source whiteboard engine
-- [aiohttp](https://docs.aiohttp.org) — the tiny Python server
-- No Electron. No telemetry. No cloud dependency unless you deploy a room yourself.
+- [aiohttp](https://docs.aiohttp.org) — a tiny Python server
+- No Electron. No telemetry. No account. Works fully offline.
 
-## Licence
+## 📄 Licence
 
 [Apache License 2.0](LICENSE) — use it, change it, ship it.
