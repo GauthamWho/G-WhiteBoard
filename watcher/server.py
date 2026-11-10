@@ -1,0 +1,538 @@
+#!/usr/bin/env python3
+"""
+Whiteboard Catcher — clipboard watcher + web server (single process).
+
+- Serves the Excalidraw front-end from ../web/dist (port 8765)
+- Saves / serves board scene JSON (data/board.json + data/board.excalidraw)
+- WebSocket hub (WS /ws) that broadcasts clipboard captures
+- Global hotkey Ctrl+Alt+C triggers a READ-ONLY clipboard capture
+  (image first, then text). The clipboard is never written or cleared.
+
+Designed to be light (~20 MB RAM): aiohttp + pynput + Pillow + pyperclip.
+Python 3.10+ (tested on 3.14, Windows).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import io
+import json
+import logging
+import platform
+import sys
+import threading
+import time
+import uuid
+import webbrowser
+from datetime import datetime
+from pathlib import Path
+
+from aiohttp import WSMsgType, web
+
+try:
+    from pynput import keyboard
+except Exception:  # pragma: no cover - keeps the web server usable without pynput
+    keyboard = None
+
+# ----------------------------------------------------------------------------
+# Paths & logging
+# ----------------------------------------------------------------------------
+
+WATCHER_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = WATCHER_DIR.parent
+WEB_DIST = PROJECT_DIR / "web" / "dist"
+DATA_DIR = WATCHER_DIR / "data"
+BOARD_JSON = DATA_DIR / "board.json"
+BOARD_EXCALIDRAW = DATA_DIR / "board.excalidraw"
+
+HOST = "127.0.0.1"
+PORT = 8765
+DEFAULT_HOTKEY = "ctrl+alt+c"  # user-changeable in watcher/config.json
+DEBOUNCE_SECONDS = 0.5
+CONFIG_PATH = WATCHER_DIR / "config.json"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[
+        logging.FileHandler(WATCHER_DIR / "watcher.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+log = logging.getLogger("whiteboard-catcher")
+
+# ----------------------------------------------------------------------------
+# Hotkey config (user-changeable, Windows + Mac)
+# ----------------------------------------------------------------------------
+# config.json: {"hotkey": "ctrl+alt+c"} — change the file or POST /config and
+# it applies live, no restart needed. Syntax: mods+key, e.g. "ctrl+alt+c",
+# "ctrl+shift+b", "f8" (single function key). Same file works on Mac.
+
+_IS_MAC = platform.system() == "Darwin"
+_MOD_NAMES = {"ctrl", "control", "alt", "option", "shift", "win", "cmd", "super", "meta"}
+_KEY_TOKENS = set("abcdefghijklmnopqrstuvwxyz0123456789") | {f"f{i}" for i in range(1, 25)} | {
+    "space", "enter", "tab", "esc", "backspace", "up", "down", "left", "right",
+    "home", "end", "pageup", "pagedown", "insert", "delete",
+}
+
+
+def _read_hotkey() -> str:
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        hk = _normalize_hotkey(str(cfg.get("hotkey") or "").strip())
+        if hk:
+            return hk
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        log.warning("config.json unreadable (%s) — using default hotkey", exc)
+    return DEFAULT_HOTKEY
+
+
+def _write_hotkey(hotkey: str) -> None:
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"hotkey": hotkey}, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(CONFIG_PATH)
+
+
+def _normalize_hotkey(hotkey: str) -> str:
+    """Validate + normalize 'ctrl+alt+c' style. Raises ValueError if bad."""
+    parts = [p.strip().lower() for p in hotkey.split("+") if p.strip()]
+    if not parts:
+        raise ValueError("hotkey is empty")
+    *mods, key = parts
+    if key not in _KEY_TOKENS:
+        raise ValueError(f"unsupported key '{key}' (use a letter, digit, F1-F12, or a named key)")
+    if any(m not in _MOD_NAMES for m in mods):
+        raise ValueError(f"unsupported modifier in '{hotkey}' (use ctrl/alt/shift/win)")
+    mods = ["ctrl" if m == "control" else "alt" if m == "option" else "cmd" if m in ("super", "meta") else m for m in mods]
+    if not mods and not key.startswith("f"):
+        raise ValueError("a bare single key would block typing everywhere — use a function key like 'f8', or add modifiers")
+    return "+".join(mods + [key])
+
+
+def _display_hotkey(hotkey: str) -> str:
+    return "+".join(p.capitalize() if len(p) > 1 else p.upper() for p in hotkey.split("+"))
+
+
+def _pynput_combo(hotkey: str) -> str:
+    """'ctrl+alt+c' -> pynput '<ctrl>+<alt>+c' (for the Mac listener)."""
+    return "".join(f"<{p}>+" for p in hotkey.split("+")[:-1]) + hotkey.split("+")[-1]
+
+
+class HotkeyManager:
+    """Starts/stops/re-registers the global hotkey. Windows uses
+    RegisterHotKey (OS-guaranteed delivery, survives elevated windows);
+    macOS uses a pynput GlobalHotKeys listener."""
+
+    def __init__(self) -> None:
+        self._stop: threading.Event | None = None
+        self._thread: threading.Thread | None = None
+        self.hotkey: str = _read_hotkey()
+
+    def start(self, hotkey: str) -> bool:
+        self.stop()
+        self.hotkey = hotkey
+        self._stop = threading.Event()
+        target = self._run_mac if _IS_MAC else self._run_windows
+        self._thread = threading.Thread(target=target, args=(hotkey, self._stop), daemon=True, name="hotkey")
+        self._thread.start()
+        return True  # registration failure is logged inside the thread
+
+    def stop(self) -> None:
+        if self._stop is not None:
+            self._stop.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=3)
+        self._stop, self._thread = None, None
+
+    def restart(self, hotkey: str) -> bool:
+        self.start(hotkey)
+        return True
+
+    # -- Windows: RegisterHotKey + message pump ------------------------------
+    def _run_windows(self, hotkey: str, stop: threading.Event) -> None:
+        import ctypes as ct
+        from ctypes import wintypes as wt
+
+        mod_bits = {"ctrl": 0x0002, "alt": 0x0001, "shift": 0x0004, "win": 0x0008}
+        parts = hotkey.split("+")
+        mods = sum(mod_bits[p] for p in parts[:-1])
+        key = parts[-1]
+        vk = 0x70 + int(key[1:]) - 1 if key.startswith("f") and key[1:].isdigit() else ord(key.upper())
+        atom = 1
+        user32 = ct.windll.user32
+        if not user32.RegisterHotKey(None, atom, mods, vk):
+            log.error("Hotkey %s could not be registered — already taken by another app. Pick another.", _display_hotkey(hotkey))
+            return
+        log.info("Global hotkey active: %s", _display_hotkey(hotkey))
+        msg = wt.MSG()
+        WM_HOTKEY, WM_QUIT, QS_ALLINPUT = 0x0312, 0x0012, 0x0100
+        try:
+            while not stop.is_set():
+                # wait up to 200 ms for a message so we can also watch stop
+                if user32.MsgWaitForMultipleObjects(0, None, False, 200, QS_ALLINPUT) == 0:
+                    while user32.PeekMessageW(ct.byref(msg), None, 0, 0, 1):
+                        if msg.message == WM_HOTKEY:
+                            log.info("Hotkey fired (%s)", _display_hotkey(hotkey))
+                            on_hotkey()
+                        elif msg.message == WM_QUIT:
+                            return
+        finally:
+            user32.UnregisterHotKey(None, atom)
+            log.info("Hotkey %s unregistered", _display_hotkey(hotkey))
+
+    # -- macOS: pynput GlobalHotKeys -----------------------------------------
+    def _run_mac(self, hotkey: str, stop: threading.Event) -> None:
+        if keyboard is None:
+            log.warning("pynput unavailable — global hotkey disabled (web server only)")
+            return
+        try:
+            listener = keyboard.GlobalHotKeys({_pynput_combo(hotkey): on_hotkey})
+            listener.start()
+            log.info("Global hotkey active: %s", _display_hotkey(hotkey))
+            stop.wait()
+        except Exception as exc:
+            log.error("Hotkey listener failed: %s", exc)
+            log.error("On macOS, grant Accessibility permission (System Settings > Privacy & Security > Accessibility).")
+            return
+        finally:
+            try:
+                listener.stop()
+            except Exception:
+                pass
+
+
+HOTKEY_MANAGER = HotkeyManager()
+
+
+def _config_watcher() -> None:
+    """Watch config.json; apply hotkey changes live."""
+    hotkey = HOTKEY_MANAGER.hotkey
+    last = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else 0.0
+    while True:
+        time.sleep(2)
+        try:
+            mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else 0.0
+            if mtime != last:
+                last = mtime
+                new = _read_hotkey()
+                if new != hotkey:
+                    log.info("Hotkey changed via config.json: %s -> %s", _display_hotkey(hotkey), _display_hotkey(new))
+                    hotkey = new
+                    HOTKEY_MANAGER.start(new)
+        except Exception as exc:
+            log.warning("config watcher: %s", exc)
+
+
+# ----------------------------------------------------------------------------
+# WebSocket hub
+# ----------------------------------------------------------------------------
+
+clients: set = set()
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+async def ws_handler(request: web.Request) -> web.WebSocketResponse:
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    clients.add(ws)
+    log.info("WS client connected (%d total)", len(clients))
+    try:
+        async for msg in ws:
+            if msg.type == WSMsgType.ERROR:
+                log.warning("WS error: %s", msg.exception)
+    finally:
+        clients.discard(ws)
+        log.info("WS client disconnected (%d total)", len(clients))
+    return ws
+
+
+async def broadcast(message: dict) -> None:
+    """Send a JSON message to every connected WS client. Never raises."""
+    if not clients:
+        log.info("Broadcast skipped: no clients connected (%s)", message.get("type"))
+        return
+    dead = []
+    payload = json.dumps(message)
+    for ws in list(clients):
+        try:
+            await ws.send_str(payload)
+        except Exception as exc:
+            log.warning("Broadcast to a client failed: %s", exc)
+            dead.append(ws)
+    for ws in dead:
+        clients.discard(ws)
+
+
+def broadcast_threadsafe(message: dict) -> None:
+    """Safe to call from the pynput hotkey thread."""
+    if _loop is None:
+        log.warning("Event loop not ready; capture dropped")
+        return
+    asyncio.run_coroutine_threadsafe(broadcast(message), _loop)
+
+# ----------------------------------------------------------------------------
+# HTTP handlers
+# ----------------------------------------------------------------------------
+
+NO_BUILD_PAGE = """<!DOCTYPE html>
+<html><head><title>Whiteboard Catcher</title></head>
+<body style="font-family: system-ui, sans-serif; padding: 2rem;">
+<h1>Whiteboard web app not built yet</h1>
+<p>Run the build in <code>web/</code> so that <code>web/dist</code> exists,
+then restart this server or just reload this page.</p>
+</body></html>"""
+
+
+async def index_handler(request: web.Request) -> web.StreamResponse:
+    index = WEB_DIST / "index.html"
+    if index.is_file():
+        return web.FileResponse(index)
+    return web.Response(text=NO_BUILD_PAGE, content_type="text/html")
+
+
+def _empty_scene() -> dict:
+    return {"elements": [], "appState": {}, "files": {}}
+
+
+async def scene_handler(request: web.Request) -> web.Response:
+    try:
+        scene = json.loads(BOARD_JSON.read_text(encoding="utf-8"))
+        return web.json_response(scene)
+    except FileNotFoundError:
+        return web.json_response(_empty_scene())
+    except Exception as exc:
+        log.error("Failed to read board.json: %s", exc)
+        return web.json_response(_empty_scene())
+
+
+def _atomic_write_json(path: Path, payload: bytes) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(payload)
+    tmp.replace(path)
+
+
+async def save_handler(request: web.Request) -> web.Response:
+    try:
+        body = await request.read()
+        scene = json.loads(body)  # validate it's JSON; keep bytes untouched
+        if not isinstance(scene, dict):
+            raise ValueError("scene must be a JSON object")
+        # Lossless archive: bytes are stored exactly as received (base64
+        # PNG dataURLs inside "files" are never re-encoded).
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _atomic_write_json(BOARD_JSON, body)
+        _atomic_write_json(BOARD_EXCALIDRAW, body)
+        log.info(
+            "Saved scene: %d elements, %d files (%d bytes)",
+            len(scene.get("elements", [])),
+            len(scene.get("files", {})),
+            len(body),
+        )
+        return web.json_response({"ok": True})
+    except Exception as exc:
+        log.error("Save failed: %s", exc)
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+
+
+async def test_capture_handler(request: web.Request) -> web.Response:
+    try:
+        message = await request.json()
+        if not isinstance(message, dict):
+            raise ValueError("body must be a JSON object")
+        message.setdefault("type", "capture")
+        await broadcast(message)
+        return web.json_response({"ok": True, "clients": len(clients)})
+    except Exception as exc:
+        log.error("test-capture failed: %s", exc)
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+
+# ----------------------------------------------------------------------------
+# Clipboard capture (READ-ONLY — never write, never clear)
+# ----------------------------------------------------------------------------
+
+_IS_MAC = platform.system() == "Darwin"
+
+
+def _image_to_data_url(img) -> str:
+    """PIL Image -> lossless PNG base64 dataURL."""
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
+def _capture_image_windows():
+    """Return a PIL Image from the Windows clipboard, or None."""
+    try:
+        from PIL import ImageGrab
+    except ImportError:
+        return None
+    result = ImageGrab.grabclipboard()
+    if result is None:
+        return None
+    if isinstance(result, list) and result:  # list of file paths
+        for path in result:
+            try:
+                from PIL import Image
+                return Image.open(path)
+            except Exception as exc:
+                log.warning("Could not open clipboard file %s: %s", path, exc)
+        return None
+    return result  # already a PIL Image
+
+
+def _capture_image_macos():
+    """Read PNG/TIFF off the macOS NSPasteboard via pyobjc. Untested."""
+    try:
+        import AppKit  # pyobjc
+    except ImportError:
+        log.warning("macOS: pyobjc (AppKit) not installed; image capture unavailable")
+        return None
+    try:
+        pb = AppKit.NSPasteboard.generalPasteboard()
+        data = pb.dataForType_(AppKit.NSPasteboardTypePNG)
+        if data is None:
+            tiff = pb.dataForType_(AppKit.NSPasteboardTypeTIFF)
+            if tiff is None:
+                return None
+            from PIL import Image, ImageFile
+            import io as _io
+            img = Image.open(_io.BytesIO(bytes(tiff)))
+            return img
+        from PIL import Image
+        return Image.open(io.BytesIO(bytes(data)))
+    except Exception as exc:
+        log.error("macOS clipboard image read failed: %s", exc)
+        return None
+
+
+def capture_clipboard() -> dict | None:
+    """Read the clipboard once. Image first, then text. Never writes it."""
+    img = _capture_image_windows() if not _IS_MAC else _capture_image_macos()
+    if img is not None:
+        try:
+            data_url = _image_to_data_url(img)
+            return {
+                "type": "capture",
+                "kind": "image",
+                "text": None,
+                "dataUrl": data_url,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "id": str(uuid.uuid4()),
+            }
+        except Exception as exc:
+            log.error("Image -> PNG conversion failed: %s", exc)
+
+    try:
+        import pyperclip
+        text = pyperclip.paste()
+    except Exception as exc:
+        log.error("Text clipboard read failed: %s", exc)
+        return None
+    if not text or not text.strip():
+        return None
+    return {
+        "type": "capture",
+        "kind": "text",
+        "text": text,
+        "dataUrl": None,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "id": str(uuid.uuid4()),
+    }
+
+
+_last_capture_at = 0.0
+_debounce_lock = threading.Lock()
+
+
+def on_hotkey() -> None:
+    """pynput callback (its own thread). Debounce, capture, broadcast."""
+    global _last_capture_at
+    with _debounce_lock:
+        now = time.monotonic()
+        if now - _last_capture_at < DEBOUNCE_SECONDS:
+            log.info("Hotkey debounced (within %.0f ms)", DEBOUNCE_SECONDS * 1000)
+            return
+        _last_capture_at = now
+    try:
+        message = capture_clipboard()
+        if message is None:
+            log.info("Capture: clipboard empty or unsupported content — skipped")
+            return
+        size = len(message.get("text") or message.get("dataUrl") or "")
+        log.info("Capture: kind=%s size=%d chars", message["kind"], size)
+        broadcast_threadsafe(message)
+    except Exception as exc:
+        log.error("Capture failed (process keeps running): %s", exc)
+
+
+# ----------------------------------------------------------------------------
+# Startup
+# ----------------------------------------------------------------------------
+
+
+async def config_get_handler(request: web.Request) -> web.Response:
+    return web.json_response({"hotkey": HOTKEY_MANAGER.hotkey, "display": _display_hotkey(HOTKEY_MANAGER.hotkey)})
+
+
+async def config_post_handler(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+        hotkey = _normalize_hotkey(str(body.get("hotkey", "")))
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": f"invalid hotkey: {exc}"}, status=400)
+    HOTKEY_MANAGER.start(hotkey)  # live re-register, no restart needed
+    _write_hotkey(hotkey)
+    log.info("Hotkey set via /config: %s", _display_hotkey(hotkey))
+    return web.json_response({"ok": True, "hotkey": hotkey, "display": _display_hotkey(hotkey)})
+
+
+def make_app() -> web.Application:
+    app = web.Application()
+
+    async def _on_startup(app: web.Application) -> None:
+        global _loop
+        _loop = asyncio.get_running_loop()
+
+    app.on_startup.append(_on_startup)
+    app.router.add_get("/", index_handler)
+    app.router.add_get("/scene", scene_handler)
+    app.router.add_post("/save", save_handler)
+    app.router.add_get("/ws", ws_handler)
+    app.router.add_post("/test-capture", test_capture_handler)
+    app.router.add_get("/config", config_get_handler)
+    app.router.add_post("/config", config_post_handler)
+
+    if WEB_DIST.is_dir():
+        # Serve built assets (JS/CSS/fonts) — static files win over nothing;
+        # the routes above were registered first so they take priority.
+        app.router.add_static("/assets/", WEB_DIST / "assets")
+        app.router.add_static("/", WEB_DIST)
+    return app
+
+
+def main() -> None:
+    hotkey = HOTKEY_MANAGER.hotkey
+    log.info("Whiteboard Catcher starting on http://%s:%d", HOST, PORT)
+    log.info("Web dist: %s", WEB_DIST if WEB_DIST.is_dir() else "NOT BUILT (fallback page will be served)")
+    print(f"\n  Whiteboard Catcher  ->  http://localhost:{PORT}")
+    print(f"  press {_display_hotkey(hotkey)} anywhere to capture  (change it in config.json — applies live)")
+    print("  Ctrl+C to quit\n")
+
+    HOTKEY_MANAGER.start(hotkey)
+    threading.Thread(target=_config_watcher, daemon=True, name="config-watch").start()
+    try:
+        web.run_app(make_app(), host=HOST, port=PORT, print=None)
+    except KeyboardInterrupt:
+        log.info("Ctrl+C received — shutting down")
+    finally:
+        HOTKEY_MANAGER.stop()
+
+
+if __name__ == "__main__":
+    main()

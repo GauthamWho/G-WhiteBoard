@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+web/node_modules/
+
+# Personal board data & logs — never public
+watcher/data/
+watcher/watcher.log
+watcher/config.json
