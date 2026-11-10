@@ -24,18 +24,22 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 | 5 | Launchers (double-click start on Windows), README | ✅ Built — `watcher\start_windows.ps1` |
 | 6 | **User retest: Flameshot copy → Ctrl+Alt+C** | 🔄 Waiting on Gautham |
 | 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ READY locally — repo committed at `Projects\Tools\2026-11-whiteboard-catcher`, **waiting for your "go" to push** (I can't create public repos; you create the empty repo at github.com/new, I push) |
-| 8 | **Shared boards** — you in place A, friend in place B, one live board | 🔄 Building now (room links + live sync + merge-by-item-id) |
+| 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |
 | 9 | Mac setup + permission steps (built, **not run on the Mac yet**) | ⬜ |
 
 **WE ARE HERE →** Step 6 (your Flameshot retest) + Step 7 ready to push on your word.
 
-### Step 8 plan — Shared boards (kept ready, built when you say go)
+### Step 8 — how shared boards work (built)
 
-- Every board gets a **room**: same room link = same board, like other whiteboard platforms.
-- The watcher (or one tiny relay file) passes each change to everyone in the room; changes
-  merge by element id, so two people never erase each other.
-- Run it two ways: on your own machine for a quick share, or one free-tier deploy for always-on.
-- Your captures still land with timestamps; your friend sees them appear live.
+- Add `?room=anything` to the board URL → the page joins that room; share the link (Copy Link).
+- A room relay (`watcher/server.py` `/room/<id>`, or the standalone `relay/relay.py` for free-host
+  deploy) passes every change between all peers; changes merge by element id, so nobody erases
+  anybody. Snapshots on join keep newcomers up to date.
+- The room bar (link + who's online) has a **– button** to hide it — it collapses to a tiny
+  pill in the top-left; click the pill to bring it back. Your choice is remembered.
+- **Tested here:** two Edge windows in one room, both show "2 online", a capture sent to one
+  lands on both (saved 30 elements on each). **Not yet tested:** two real locations (needs the
+  relay deployed — see `relay/README.md`, manual free-host account step).
 
 ## Parked / not now
 - Multi-board tabs (one board for now)
