@@ -579,6 +579,22 @@ _last_capture_at = 0.0
 _debounce_lock = threading.Lock()
 
 
+def _send_native_copy() -> None:
+    """Send Ctrl+C on Windows or Cmd+C on macOS to copy the current selection."""
+    if keyboard is None:
+        return
+    try:
+        ctrl = keyboard.Key.cmd if _IS_MAC else keyboard.Key.ctrl
+        with keyboard.Controller() as ctrlr:
+            ctrlr.press(ctrl)
+            ctrlr.press('c')
+            ctrlr.release('c')
+            ctrlr.release(ctrl)
+        # Give the OS a moment to update the clipboard
+        time.sleep(0.08)
+    except Exception as exc:
+        log.debug("Native copy send failed: %s", exc)
+
 def on_hotkey() -> None:
     """pynput callback (its own thread). Debounce, capture, broadcast."""
     global _last_capture_at
@@ -589,6 +605,8 @@ def on_hotkey() -> None:
             return
         _last_capture_at = now
     try:
+        # Copy first, then capture — Ctrl+Shift+C becomes copy+send
+        _send_native_copy()
         message = capture_clipboard()
         if message is None:
             log.info("Capture: clipboard empty or unsupported content — skipped")
