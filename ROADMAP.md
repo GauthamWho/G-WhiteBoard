@@ -23,10 +23,10 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 | 4 | Hotkey fix + user-changeable hotkey (both OSes) | ✅ Done — replaced flaky key-hook with OS-registered hotkey; change live via `watcher/config.json` or POST `/config` |
 | 5 | Launchers (double-click start on Windows), README | ✅ Built — `watcher\start_windows.ps1` |
 | 6 | **User retest: Flameshot copy → Ctrl+Alt+C** | 🔄 Waiting on Gautham |
-| 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ READY locally — repo committed at `Projects\Tools\2026-11-whiteboard-catcher`, **waiting for your "go" to push** (I can't create public repos; you create the empty repo at github.com/new, I push) |
+| 7 | Public GitHub repo **G-WhiteBoard** (Apache-2.0, README, Mac-ready) | ✅ **DONE — LIVE at github.com/GauthamWho/G-WhiteBoard** (pushed, 150+ files, no personal data; README with graphics) |
 | 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |
 | 9 | Mac setup + permission steps (built, **not run on the Mac yet**) | ⬜ |
-| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | 🔄 Deploy prep committed (`render.yaml`, public bind + headless-safe hotkey). **Waiting on Gautham:** empty repo at github.com/new → push → 3 clicks on Render |
+| 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | ✅ Code pushed to GitHub. **On Gautham:** 3 clicks on Render (New + → Web Service → pick G-WhiteBoard → Apply) |
 | 11 | **Daily auto-backups** — last 7 days in `watcher/data/backups/YYYY-MM-DD/` | ✅ Done + live-tested (fires on first save of each day, atomic copies, auto-prune) |
 
 **WE ARE HERE →** Step 6 (your Flameshot retest) + Step 7 ready to push on your word.
