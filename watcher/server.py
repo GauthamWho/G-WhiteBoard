@@ -22,6 +22,7 @@ import logging
 import os
 import platform
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -630,12 +631,70 @@ async def config_post_handler(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "hotkey": hotkey, "display": _display_hotkey(hotkey)})
 
 
+
+# ----------------------------------------------------------------------------
+# Update check: is a newer commit on GitHub than the copy running here?
+# If yes, the board shows a small "Update available" pill. Installing stays
+# one double-click on the UPDATE file — never automatic mid-use.
+# ----------------------------------------------------------------------------
+
+REPO_API_URL = "https://api.github.com/repos/GauthamWho/G-WhiteBoard/commits/master"
+UPDATE_CHECK_INTERVAL = 6 * 3600  # seconds
+_update_status: dict = {"update_available": False, "local": None, "remote": None}
+
+
+def _local_version_sha() -> str | None:
+    """The installed copy's git commit (None if not a git clone)."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_DIR, capture_output=True, text=True, timeout=10,
+        )
+        sha = out.stdout.strip()
+        return sha if out.returncode == 0 and sha else None
+    except Exception:
+        return None
+
+
+async def _update_check_loop() -> None:
+    import aiohttp  # already a dependency of the server itself
+
+    global _update_status
+    while True:
+        remote = None
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(
+                    REPO_API_URL, timeout=aiohttp.ClientTimeout(total=15),
+                    headers={"Accept": "application/vnd.github+json"},
+                ) as resp:
+                    if resp.status == 200:
+                        remote = (await resp.json()).get("sha")
+        except Exception:
+            pass  # offline / rate-limited — try again next cycle, never nag
+        local = await asyncio.to_thread(_local_version_sha)
+        _update_status = {
+            "update_available": bool(local and remote and local != remote),
+            "local": local[:7] if local else None,
+            "remote": remote[:7] if remote else None,
+        }
+        if _update_status["update_available"]:
+            log.info("Update available: installed %s, GitHub has %s (run the UPDATE file)",
+                     _update_status["local"], _update_status["remote"])
+        await asyncio.sleep(UPDATE_CHECK_INTERVAL)
+
+
+async def update_status_handler(request: web.Request) -> web.Response:
+    return web.json_response(_update_status)
+
+
 def make_app() -> web.Application:
     app = web.Application()
 
     async def _on_startup(app: web.Application) -> None:
         global _loop
         _loop = asyncio.get_running_loop()
+        app["update_task"] = asyncio.create_task(_update_check_loop())
 
     app.on_startup.append(_on_startup)
     app.router.add_get("/", index_handler)
@@ -647,6 +706,11 @@ def make_app() -> web.Application:
     app.router.add_get("/config", config_get_handler)
     app.router.add_post("/config", config_post_handler)
     app.router.add_post("/client-log", client_log_handler)
+    app.router.add_get("/update-status", update_status_handler)
+    app.router.add_get("/favicon.ico", lambda r: web.FileResponse(WEB_DIST / "favicon.ico", content_type="image/x-icon"))
+    app.router.add_get("/favicon.svg", lambda r: web.FileResponse(WEB_DIST / "favicon.svg", content_type="image/svg+xml"))
+    app.router.add_get("/apple-touch-icon.png", lambda r: web.FileResponse(WEB_DIST / "apple-touch-icon.png", content_type="image/png"))
+    app.router.add_get("/favicon.png", lambda r: web.FileResponse(WEB_DIST / "favicon.png", content_type="image/png"))
 
     if WEB_DIST.is_dir():
         # Serve built assets (JS/CSS/fonts) — static files win over nothing;

@@ -582,6 +582,31 @@ export default function App() {
     }
   }, []);
 
+  /* ------------------------ update notification ---------------------- */
+  /* The server compares the installed copy against GitHub every few hours.
+   * When one is available we show a small calm pill — installing stays a
+   * manual double-click on the UPDATE file (never mid-use, never silent). */
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const r = await fetch("/update-status");
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!cancelled && j && j.update_available) setUpdateAvailable(true);
+      } catch {
+        /* offline — nothing to nag about */
+      }
+    };
+    check();
+    const t = window.setInterval(check, 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, []);
+
   const roomWsRef = useRef<WebSocket | null>(null);
   const myIdRef = useRef<string>("");
   const lastPeerCountRef = useRef(0);
@@ -894,6 +919,33 @@ export default function App() {
             –
           </button>
         </div>
+      )}
+      {updateAvailable && (
+        <a
+          href="https://github.com/GauthamWho/G-WhiteBoard#starting-it-every-day-10-seconds"
+          target="_blank"
+          rel="noreferrer"
+          title="A new version is on GitHub. Open the G-WhiteBoard folder and double-click the UPDATE file."
+          style={{
+            position: "fixed",
+            bottom: 14,
+            right: 14,
+            zIndex: 9998,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "5px 12px",
+            fontSize: 12,
+            color: "#3d2e00",
+            background: "#ffe9a8",
+            border: "1px solid #e3c341",
+            borderRadius: 999,
+            textDecoration: "none",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+          }}
+        >
+          ⬆ Update available
+        </a>
       )}
       {roomId && !roomBarOpen && (
         <button
