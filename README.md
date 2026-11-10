@@ -66,6 +66,10 @@ After the first install, you never type those commands again.
 *Desktop (create shortcut)*. Now starting your whiteboard is one click
 from your desktop, forever.
 
+**Reopening a closed board tab:** If you close the browser tab, just double-click
+**`OPEN G-WhiteBoard (Mac).command`** (Windows: open `http://localhost:8765` in your browser). 
+The server stays running — you’re just re-opening the window.
+
 Done? Just copy anything and press `Ctrl+Shift+C` (Mac: `Fn+Cmd+C`) —
 it's on your board.
 
