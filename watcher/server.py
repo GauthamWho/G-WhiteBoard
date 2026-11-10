@@ -53,8 +53,8 @@ BOARD_EXCALIDRAW = DATA_DIR / "board.excalidraw"
 HOST = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
 PORT = int(os.environ.get("PORT", "8765"))
 _IS_MAC = platform.system() == "Darwin"
-# Defaults per platform: Windows Ctrl+Shift+C, Mac Fn+Cmd+C (user's pick).
-DEFAULT_HOTKEY = "cmd+fn+c" if _IS_MAC else "ctrl+shift+c"
+# Defaults per platform: Windows Ctrl+Shift+C, Mac Cmd+Shift+C.
+DEFAULT_HOTKEY = "cmd+shift+c" if _IS_MAC else "ctrl+shift+c"
 DEBOUNCE_SECONDS = 0.5
 CONFIG_PATH = WATCHER_DIR / "config.json"
 _MOD_NAMES = {"ctrl", "control", "alt", "option", "shift", "win", "cmd", "super", "meta", "fn"}
@@ -76,8 +76,6 @@ log = logging.getLogger("whiteboard-catcher")
 # it applies live, no restart needed. Syntax: mods+key, e.g. "ctrl+alt+c",
 # "ctrl+shift+b", "f8" (single function key). Same file works on Mac.
 
-_IS_MAC = platform.system() == "Darwin"
-_MOD_NAMES = {"ctrl", "control", "alt", "option", "shift", "win", "cmd", "super", "meta"}
 _KEY_TOKENS = set("abcdefghijklmnopqrstuvwxyz0123456789") | {f"f{i}" for i in range(1, 25)} | {
     "space", "enter", "tab", "esc", "backspace", "up", "down", "left", "right",
     "home", "end", "pageup", "pagedown", "insert", "delete",

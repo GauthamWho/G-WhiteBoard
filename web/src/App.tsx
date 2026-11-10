@@ -573,6 +573,26 @@ export default function App() {
       return true;
     }
   });
+
+  const [hotkey, setHotkey] = useState("...");
+  useEffect(() => {
+    fetch("/config").then(r => r.json()).then(j => setHotkey(j.display));
+  }, []);
+
+  const updateHotkey = async (newHotkey: string) => {
+    const r = await fetch("/config", {
+      method: "POST",
+      body: JSON.stringify({ hotkey: newHotkey.toLowerCase() }),
+      headers: { "Content-Type": "application/json" },
+    });
+    if (r.ok) {
+      const j = await r.json();
+      setHotkey(j.display);
+    } else {
+      alert("Invalid hotkey format. Try e.g. ctrl+shift+c");
+    }
+  };
+
   const toggleRoomBar = useCallback((open: boolean) => {
     setRoomBarOpen(open);
     try {
@@ -900,6 +920,25 @@ export default function App() {
             }}
           >
             {copied ? "Copied!" : "Copy Link"}
+          </button>
+          <button
+            onClick={() => {
+              const newHk = prompt("Enter new shortcut (e.g. ctrl+shift+c or cmd+shift+c):", hotkey.toLowerCase());
+              if (newHk) updateHotkey(newHk);
+            }}
+            title="Click to change your shortcut"
+            style={{
+              padding: "8px 12px",
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#333",
+              background: "#f0f0f0",
+              border: "1px solid rgba(0,0,0,0.12)",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            ⌨️ {hotkey}
           </button>
           <button
             onClick={() => toggleRoomBar(false)}
