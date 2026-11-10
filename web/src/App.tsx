@@ -747,9 +747,14 @@ export default function App() {
     const connect = () => {
       if (disposed) return;
       try {
-        ws = new WebSocket(
-          `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/room/${roomId}`
-        );
+        // Room lives on the same server as the page, unless ?relay=<host>
+        // overrides it — that's how a local board joins a room on the
+        // deployed cloud copy (see DEPLOY.md).
+        const relayParam = new URLSearchParams(location.search).get("relay");
+        const base = relayParam
+          ? relayParam.replace(/^http:/, "ws:").replace(/^https:/, "wss:")
+          : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
+        ws = new WebSocket(`${base}/room/${roomId}`);
       } catch {
         reconnectTimer = window.setTimeout(connect, 2000);
         return;
