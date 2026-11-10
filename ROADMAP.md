@@ -27,6 +27,7 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 | 8 | **Shared boards** — you in place A, friend in place B, one live board | ✅ Built + tested on this PC — room link, live two-window sync proven, merge-by-id; room bar is collapsible (tiny pill top-left). **Not yet tested across two real locations** — needs the free relay deploy (manual account step) |
 | 9 | Mac setup + permission steps (built, **not run on the Mac yet**) | ⬜ |
 | 10 | **Cloud deploy (Render free)** — always-on shared board, PC can be off | 🔄 Deploy prep committed (`render.yaml`, public bind + headless-safe hotkey). **Waiting on Gautham:** empty repo at github.com/new → push → 3 clicks on Render |
+| 11 | **Daily auto-backups** — last 7 days in `watcher/data/backups/YYYY-MM-DD/` | ✅ Done + live-tested (fires on first save of each day, atomic copies, auto-prune) |
 
 **WE ARE HERE →** Step 6 (your Flameshot retest) + Step 7 ready to push on your word.
 
