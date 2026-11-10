@@ -14,6 +14,10 @@ forever, and works like a normal whiteboard (pan, zoom, drag, arrange).
 
 ## Steps
 
+**Standing rule (Gautham, 2026-11-10): every change ships with a full docs sweep — README,
+DEPLOY.md, ROADMAP.md and all SVG graphics must match the code before any commit. Docs are
+part of "done", never a follow-up.**
+
 | # | Step | State |
 |---|------|-------|
 | 0 | Decisions + roadmap | ✅ Done |
