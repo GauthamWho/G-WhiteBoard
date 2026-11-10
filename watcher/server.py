@@ -397,6 +397,40 @@ def _atomic_write_json(path: Path, payload: bytes) -> None:
     tmp.replace(path)
 
 
+BACKUP_DIR = DATA_DIR / "backups"
+BACKUPS_TO_KEEP = 7
+_last_backup_day: str | None = None
+
+
+def _maybe_daily_backup() -> None:
+    """Once per day (on the first save of that day), snapshot the board and
+    keep the last BACKUPS_TO_KEEP days. A bad day becomes recoverable."""
+    global _last_backup_day
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        if today == _last_backup_day or not BOARD_JSON.exists():
+            return
+        _last_backup_day = today
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        day_dir = BACKUP_DIR / today
+        if day_dir.exists():  # manual rerun / clock jump — refresh, don't nest
+            _atomic_write_json(day_dir / "board.json", BOARD_JSON.read_bytes())
+        else:
+            day_dir.mkdir(parents=True, exist_ok=False)
+            _atomic_write_json(day_dir / "board.json", BOARD_JSON.read_bytes())
+            if BOARD_EXCALIDRAW.exists():
+                _atomic_write_json(day_dir / "board.excalidraw", BOARD_EXCALIDRAW.read_bytes())
+        days = sorted(d.name for d in BACKUP_DIR.iterdir() if d.is_dir())
+        for old in days[:-BACKUPS_TO_KEEP]:
+            for f in (BACKUP_DIR / old).iterdir():
+                f.unlink(missing_ok=True)
+            (BACKUP_DIR / old).rmdir()
+        log.info("Daily backup saved: %s (keeping %d days)", today, BACKUPS_TO_KEEP)
+    except Exception as exc:
+        # a backup hiccup must never fail the save itself
+        log.error("Daily backup failed: %s", exc)
+
+
 async def save_handler(request: web.Request) -> web.Response:
     try:
         body = await request.read()
@@ -408,6 +442,7 @@ async def save_handler(request: web.Request) -> web.Response:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         _atomic_write_json(BOARD_JSON, body)
         _atomic_write_json(BOARD_EXCALIDRAW, body)
+        _maybe_daily_backup()
         log.info(
             "Saved scene: %d elements, %d files (%d bytes)",
             len(scene.get("elements", [])),
