@@ -20,6 +20,7 @@ import io
 import json
 import logging
 import platform
+import re
 import sys
 import threading
 import time
@@ -276,6 +277,78 @@ def broadcast_threadsafe(message: dict) -> None:
     asyncio.run_coroutine_threadsafe(broadcast(message), _loop)
 
 # ----------------------------------------------------------------------------
+# Room relay (shared boards)
+# ----------------------------------------------------------------------------
+# Clients connect to GET /room/<room_id> (any number of rooms). Every JSON
+# message a client sends is relayed, wrapped, to the others in the room:
+#   {"type": "change", "from": <client_id>, "payload": <original message>}
+# The client id arrives as the first message: {"type": "hello", "id": "..."}.
+# Non-JSON frames are ignored silently. Same protocol as relay/relay.py
+# (the standalone deployable relay).
+
+ROOM_ID_RE = re.compile(r"^[a-z0-9-]{3,64}$")
+
+rooms: dict[str, set] = {}  # room_id -> sockets currently in the room
+room_client_ids: dict = {}  # socket -> client id (set via the hello message)
+
+
+async def room_send(room: set, message: dict, exclude=None) -> None:
+    """Send a JSON message to every socket in a room (optionally except one)."""
+    payload = json.dumps(message)
+    dead = []
+    for ws in list(room):
+        if ws is exclude:
+            continue
+        try:
+            await ws.send_str(payload)
+        except Exception as exc:
+            log.warning("Room send failed: %s", exc)
+            dead.append(ws)
+    for ws in dead:
+        room.discard(ws)
+
+
+async def room_handler(request: web.Request) -> web.WebSocketResponse:
+    room_id = request.match_info["room_id"]
+    if not ROOM_ID_RE.match(room_id):
+        return web.json_response({"ok": False, "error": "invalid room id"}, status=400)
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    room = rooms.setdefault(room_id, set())
+    room.add(ws)
+    log.info("Room %s: peer joined (%d in room)", room_id, len(room))
+    await room_send(room, {"type": "peers", "count": len(room)})
+    try:
+        async for msg in ws:
+            if msg.type == WSMsgType.ERROR:
+                log.warning("Room WS error: %s", msg.exception)
+            elif msg.type == WSMsgType.TEXT:
+                try:
+                    data = json.loads(msg.data)
+                except Exception:
+                    continue  # non-JSON frames are ignored silently
+                if not isinstance(data, dict):
+                    continue
+                if data.get("type") == "hello":
+                    if isinstance(data.get("id"), str) and data["id"]:
+                        room_client_ids[ws] = data["id"]
+                    continue
+                client_id = room_client_ids.get(ws)
+                if client_id is None:
+                    continue  # messages before hello are ignored
+                await room_send(
+                    room, {"type": "change", "from": client_id, "payload": data}, exclude=ws
+                )
+    finally:
+        room.discard(ws)
+        room_client_ids.pop(ws, None)
+        await room_send(room, {"type": "peers", "count": len(room)})
+        if not room:
+            rooms.pop(room_id, None)  # prune empty rooms
+        log.info("Room %s: peer left", room_id)
+    return ws
+
+# ----------------------------------------------------------------------------
 # HTTP handlers
 # ----------------------------------------------------------------------------
 
@@ -480,6 +553,16 @@ async def config_get_handler(request: web.Request) -> web.Response:
     return web.json_response({"hotkey": HOTKEY_MANAGER.hotkey, "display": _display_hotkey(HOTKEY_MANAGER.hotkey)})
 
 
+async def client_log_handler(request: web.Request) -> web.Response:
+    """Browser crashes land here so a blank page is never a mystery."""
+    try:
+        body = await request.json()
+        log.error("CLIENT-ERROR [%s] %s", body.get("kind"), str(body.get("detail", ""))[:1000])
+    except Exception:
+        pass
+    return web.json_response({"ok": True})
+
+
 async def config_post_handler(request: web.Request) -> web.Response:
     try:
         body = await request.json()
@@ -504,9 +587,11 @@ def make_app() -> web.Application:
     app.router.add_get("/scene", scene_handler)
     app.router.add_post("/save", save_handler)
     app.router.add_get("/ws", ws_handler)
+    app.router.add_get("/room/{room_id}", room_handler)
     app.router.add_post("/test-capture", test_capture_handler)
     app.router.add_get("/config", config_get_handler)
     app.router.add_post("/config", config_post_handler)
+    app.router.add_post("/client-log", client_log_handler)
 
     if WEB_DIST.is_dir():
         # Serve built assets (JS/CSS/fonts) — static files win over nothing;

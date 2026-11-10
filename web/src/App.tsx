@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 
@@ -232,6 +232,33 @@ function loadImageSize(dataUrl: string): Promise<{ w: number; h: number }> {
  * local greedy-wrap + line-count approximation when missing. */
 import * as ExcalidrawNamespace from "@excalidraw/excalidraw";
 const ExcalidrawLibAny = ExcalidrawNamespace as any as Record<string, any>;
+
+/* ------------------------------------------------------------------ */
+/* Room sync helpers (only active with ?room=<id> in the URL)          */
+/* ------------------------------------------------------------------ */
+
+const ROOM_ID_RE = /^[a-z0-9-]{3,64}$/;
+
+/** Read + sanitize the ?room= query param. Returns null in solo mode. */
+function getRoomId(): string | null {
+  try {
+    const raw = new URLSearchParams(window.location.search).get("room");
+    if (!raw) return null;
+    const id = raw.trim().toLowerCase();
+    return ROOM_ID_RE.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Random client id for the room hello handshake. */
+function newClientId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* App                                                                 */
@@ -528,6 +555,253 @@ export default function App() {
     };
   }, [insertCapture, tryRestore]);
 
+  /* ------------------------- room sync state ------------------------ */
+  /* Only active with ?room=<id> in the URL (see getRoomId). In solo mode
+   * none of this runs and behavior is unchanged. A SECOND WebSocket (next
+   * to the /ws capture hub above) relays scene changes through /room/<id>. */
+
+  const roomId = useMemo(() => getRoomId(), []);
+  const [roomConnected, setRoomConnected] = useState(false);
+  const [peerCount, setPeerCount] = useState(0);
+  const [copied, setCopied] = useState(false);
+  // Room bar visibility — remembered, so hiding it once keeps it hidden.
+  // Default true the first time so new users discover Copy Link.
+  const [roomBarOpen, setRoomBarOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("gwb-roombar") !== "hidden";
+    } catch {
+      return true;
+    }
+  });
+  const toggleRoomBar = useCallback((open: boolean) => {
+    setRoomBarOpen(open);
+    try {
+      localStorage.setItem("gwb-roombar", open ? "open" : "hidden");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const roomWsRef = useRef<WebSocket | null>(null);
+  const myIdRef = useRef<string>("");
+  const lastPeerCountRef = useRef(0);
+  // Echo suppression: version of each element as last applied FROM the room.
+  const lastRemoteRef = useRef<Map<string, number>>(new Map());
+  // Last state we broadcast per element id (diff baseline).
+  const lastSentRef = useRef<Map<string, { version: number; isDeleted: boolean }>>(new Map());
+  const sentFilesRef = useRef<Set<string>>(new Set());
+  const roomTimerRef = useRef<number | null>(null);
+  const snapshotTimerRef = useRef<number | null>(null);
+
+  const roomSend = useCallback((msg: any) => {
+    const ws = roomWsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify(msg));
+      } catch {
+        /* sync must never block or break the UI */
+      }
+    }
+  }, []);
+
+  /* Full scene once, on room open and when someone joins (peers count up). */
+  const sendSnapshot = useCallback(() => {
+    const files: Record<string, string> = {};
+    for (const [fid, f] of Object.entries(filesRef.current) as [string, any][]) {
+      if (f?.dataURL) {
+        files[fid] = f.dataURL;
+        sentFilesRef.current.add(fid);
+      }
+    }
+    roomSend({ kind: "snapshot", elements: elementsRef.current, files });
+  }, [roomSend]);
+
+  const scheduleSnapshot = useCallback(() => {
+    if (snapshotTimerRef.current !== null) window.clearTimeout(snapshotTimerRef.current);
+    snapshotTimerRef.current = window.setTimeout(() => {
+      snapshotTimerRef.current = null;
+      sendSnapshot();
+    }, 300); // let coalescing peers settle so bursts don't produce N snapshots
+  }, [sendSnapshot]);
+
+  /* Merge a remote payload (kind "elements" | "snapshot") into the scene. */
+  const applyRemote = useCallback((payload: any) => {
+    const api = apiRef.current;
+    if (!api || !payload || typeof payload !== "object") return;
+    try {
+      const merged = elementsRef.current.slice();
+      const idxOf = new Map<string, number>();
+      merged.forEach((el: any, i: number) => {
+        if (el && typeof el.id === "string") idxOf.set(el.id, i);
+      });
+      const incoming = Array.isArray(payload.elements) ? payload.elements : [];
+      let changed = false;
+      for (const e of incoming) {
+        if (!e || typeof e !== "object" || typeof e.id !== "string") continue;
+        const ev = e.version ?? 0;
+        const idx = idxOf.get(e.id);
+        if (idx === undefined) {
+          merged.push(e);
+          idxOf.set(e.id, merged.length - 1);
+        } else {
+          const cur = merged[idx];
+          const cv = cur?.version ?? 0;
+          // Newer version wins; ties break to the younger `updated`.
+          const take = ev > cv || (ev === cv && (e.updated ?? 0) >= (cur?.updated ?? 0));
+          if (!take) continue;
+          merged[idx] = e;
+        }
+        lastRemoteRef.current.set(e.id, ev); // remember exactly what we applied
+        lastSentRef.current.set(e.id, { version: ev, isDeleted: !!e.isDeleted });
+        changed = true;
+      }
+      if (!changed) return;
+      // Missing files (addFiles dedupes; we pre-filter anyway).
+      const files = payload.files;
+      if (files && typeof files === "object") {
+        const recs: any[] = [];
+        for (const [fid, v] of Object.entries(files) as [string, any][]) {
+          if (filesRef.current[fid]) continue;
+          const dataURL = typeof v === "string" ? v : v?.dataURL;
+          if (dataURL) recs.push({ id: fid, dataURL, mimeType: "image/png" });
+        }
+        if (recs.length) api.addFiles(recs as any);
+      }
+      // Pass the live appState straight back so the view is never reset.
+      api.updateScene({
+        elements: merged,
+        appState: appStateRef.current ? { ...appStateRef.current } : undefined,
+      });
+    } catch {
+      /* a bad remote payload must never break the app */
+    }
+  }, []);
+
+  /* Diff the current scene against the last-sent map and broadcast it. */
+  const broadcastDiff = useCallback(() => {
+    const elements = elementsRef.current;
+    const changed: any[] = [];
+    const fileIds = new Set<string>();
+    for (const el of elements as any[]) {
+      if (!el || typeof el.id !== "string") continue;
+      // Echo suppression: skip exactly what we last applied from the room.
+      const remoteV = lastRemoteRef.current.get(el.id);
+      if (remoteV !== undefined && (el.version ?? 0) === remoteV) continue;
+      const sent = lastSentRef.current.get(el.id);
+      if (!sent || sent.version !== (el.version ?? 0) || sent.isDeleted !== !!el.isDeleted) {
+        changed.push(el);
+        if (typeof el.fileId === "string") fileIds.add(el.fileId);
+      }
+    }
+    if (changed.length === 0) return;
+    // Files the peers have never seen go out first.
+    const newFiles: Record<string, string> = {};
+    for (const fid of fileIds) {
+      if (sentFilesRef.current.has(fid)) continue;
+      const f = (filesRef.current as Record<string, any>)[fid];
+      if (f?.dataURL) {
+        newFiles[fid] = f.dataURL;
+        sentFilesRef.current.add(fid);
+      }
+    }
+    if (Object.keys(newFiles).length > 0) roomSend({ kind: "files", files: newFiles });
+    for (const el of changed) {
+      lastSentRef.current.set(el.id, { version: el.version ?? 0, isDeleted: !!el.isDeleted });
+    }
+    roomSend({ kind: "elements", elements: changed });
+  }, [roomSend]);
+
+  const scheduleRoomBroadcast = useCallback(() => {
+    if (roomTimerRef.current !== null) window.clearTimeout(roomTimerRef.current);
+    roomTimerRef.current = window.setTimeout(() => {
+      roomTimerRef.current = null;
+      broadcastDiff();
+    }, 250);
+  }, [broadcastDiff]);
+
+  const copyLink = useCallback(() => {
+    const link = window.location.href;
+    (async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+        setCopied(true);
+      } catch {
+        try {
+          window.prompt("Copy this link:", link); // iOS Safari fallback
+        } catch {
+          /* ignore */
+        }
+      }
+    })();
+    window.setTimeout(() => setCopied(false), 1500);
+  }, []);
+
+  /* Room WebSocket — second socket, 2s auto-reconnect, same as /ws above. */
+  useEffect(() => {
+    if (!roomId) return;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let disposed = false;
+    myIdRef.current = newClientId();
+
+    const connect = () => {
+      if (disposed) return;
+      try {
+        ws = new WebSocket(
+          `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/room/${roomId}`
+        );
+      } catch {
+        reconnectTimer = window.setTimeout(connect, 2000);
+        return;
+      }
+      roomWsRef.current = ws;
+      ws.onopen = () => {
+        setRoomConnected(true);
+        try {
+          ws?.send(JSON.stringify({ type: "hello", id: myIdRef.current }));
+        } catch {
+          /* ignore */
+        }
+        scheduleSnapshot();
+      };
+      ws.onclose = () => {
+        setRoomConnected(false);
+        if (!disposed) reconnectTimer = window.setTimeout(connect, 2000);
+      };
+      ws.onerror = () => ws?.close();
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data));
+          if (msg?.type === "peers" && typeof msg.count === "number") {
+            const prev = lastPeerCountRef.current;
+            lastPeerCountRef.current = msg.count;
+            setPeerCount(msg.count);
+            if (msg.count > prev) scheduleSnapshot(); // someone joined
+          } else if (msg?.type === "change" && msg.payload) {
+            applyRemote(msg.payload);
+          }
+        } catch {
+          /* ignore malformed frames */
+        }
+      };
+    };
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (snapshotTimerRef.current !== null) window.clearTimeout(snapshotTimerRef.current);
+      if (roomTimerRef.current !== null) window.clearTimeout(roomTimerRef.current);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+      roomWsRef.current = null;
+      lastPeerCountRef.current = 0;
+      setRoomConnected(false);
+    };
+  }, [roomId, applyRemote, scheduleSnapshot]);
+
   /* ------------------------------- render ---------------------------- */
 
   return (
@@ -543,8 +817,116 @@ export default function App() {
           appStateRef.current = appState;
           filesRef.current = files;
           scheduleSave();
+          if (roomId) scheduleRoomBroadcast(); // room mode only; solo unchanged
         }}
       />
+      {roomId && roomBarOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 9998,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 12,
+            padding: "6px 12px",
+            background: "rgba(255,255,255,0.85)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            borderBottom: "1px solid rgba(0,0,0,0.08)",
+            fontSize: 13,
+            color: "#555",
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            🔗 Shared room: <strong style={{ color: "#1e1e1e" }}>{roomId}</strong>
+            <span
+              title={roomConnected ? "Room connected" : "Connecting…"}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: roomConnected ? "#3fb950" : "#e5534b",
+                display: "inline-block",
+                transition: "background 0.3s ease",
+              }}
+            />
+            · {peerCount} online
+          </span>
+          <button
+            onClick={copyLink}
+            style={{
+              padding: "8px 16px",
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#fff",
+              background: "#1e1e1e",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "Copied!" : "Copy Link"}
+          </button>
+          <button
+            onClick={() => toggleRoomBar(false)}
+            title="Hide the room bar (bring it back with the small pill at the top-left)"
+            aria-label="Hide room bar"
+            style={{
+              padding: "4px 10px",
+              fontSize: 13,
+              color: "#777",
+              background: "transparent",
+              border: "1px solid rgba(0,0,0,0.12)",
+              borderRadius: 6,
+              cursor: "pointer",
+              lineHeight: 1.4,
+            }}
+          >
+            –
+          </button>
+        </div>
+      )}
+      {roomId && !roomBarOpen && (
+        <button
+          onClick={() => toggleRoomBar(true)}
+          title="Show the room bar"
+          aria-label="Show room bar"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 10,
+            zIndex: 9998,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "3px 10px",
+            fontSize: 11,
+            color: "#666",
+            background: "rgba(255,255,255,0.75)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderTop: "none",
+            borderRadius: "0 0 8px 8px",
+            cursor: "pointer",
+          }}
+        >
+          🔗 {peerCount}
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: roomConnected ? "#3fb950" : "#e5534b",
+              display: "inline-block",
+            }}
+          />
+        </button>
+      )}
       <div
         title={connected ? "Connected" : "Disconnected"}
         style={{

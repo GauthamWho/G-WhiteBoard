@@ -55,6 +55,30 @@ Builds to `web/dist/` (served by the Python clipboard-catcher server at `GET /`)
 ### Connection dot
 - 8 px dot, bottom-left corner, green/red, tooltip on hover only. No banners.
 
+### Room sync (only with `?room=<id>` in the URL)
+- Without `?room=` nothing of this runs — solo mode is unchanged.
+- With a sanitized room id (lowercase `[a-z0-9-]{3,64}`) the page opens a
+  **second** WebSocket to `/room/<room_id>` (next to the `/ws` capture hub),
+  sends `{"type":"hello","id":<uuid>}`, and auto-reconnects every 2 s.
+- **Room bar** (fixed top, translucent, one row): `🔗 Shared room: <id>`,
+  a green/red connection dot and `<N> online` (from the relay's `peers`
+  messages), plus a prominent **Copy Link** button (`location.href`,
+  clipboard API with a `prompt` fallback for iOS Safari).
+- **Protocol**: `{kind:"snapshot", elements, files}` on room open and when
+  the `peers` count increases; then `{kind:"elements", elements}` diffs
+  (debounced 250 ms) and `{kind:"files", files}` (dataURLs) flushed before
+  any element that references a never-sent `fileId`.
+- **Merge rule**: per incoming element — replace local when absent, when
+  `version` is greater, or on equal versions when `updated` is greater-or-
+  equal; then one `updateScene({ elements, appState: {...live appState} })`
+  (view/selection never reset). Files go through `addFiles` for unknown ids.
+- **Echo suppression**: after applying remote elements we record their
+  versions in `lastRemote`; the broadcast diff skips any element whose
+  current version equals its `lastRemote` entry, so remote updates are never
+  echoed back. The `/save` autosave (800 ms) is untouched.
+- Captures arriving via `/ws` just insert locally and flow to the room
+  through the same onChange diff — no special casing.
+
 ## Excalidraw API quirks hit
 1. **`wrapText` / `measureText` are NOT exported from the package root in
    0.18.1** (verified against `dist/types/excalidraw/index.d.ts` and the prod
@@ -70,6 +94,10 @@ Builds to `web/dist/` (served by the Python clipboard-catcher server at `GET /`)
    `restore()`, which fills defaults.
 
 ## Untested / caveats
+- **Live two-window room sync is untested** — same as below, the two-peer
+  (multi-window) test is done manually after deploying; only `npm run build`
+  was verified for the room code. The echo-suppression rule (lastRemote) and
+  the snapshot-on-join path especially need a real two-browser run.
 - **Live WebSocket + real captures are untested** — the Python server (port
   8765) wasn't up during development; only `npm run build` was verified
   (exit 0, `dist/index.html` + JS bundles present). Message handling follows
